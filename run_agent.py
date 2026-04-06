@@ -80,6 +80,7 @@ from agent.memory_manager import build_memory_context_block
 from agent.prompt_builder import (
     DEFAULT_AGENT_IDENTITY, PLATFORM_HINTS,
     MEMORY_GUIDANCE, SESSION_SEARCH_GUIDANCE, SKILLS_GUIDANCE,
+    WEB_BROWSING_AGENT_IDENTITY, WEB_BROWSING_GUIDANCE,
     build_nous_subscription_prompt,
 )
 from agent.model_metadata import (
@@ -906,6 +907,21 @@ class AIAgent:
                 print(f"🔄 Fallback chain ({len(self._fallback_chain)} providers): " +
                       " → ".join(f"{f['model']} ({f['provider']})" for f in self._fallback_chain))
 
+        # Persona-based toolset override: if agent.persona is set in config,
+        # force the corresponding toolset (e.g. "web-browsing-agent").
+        try:
+            from hermes_cli.config import load_config as _load_persona_cfg
+            _persona_section = _load_persona_cfg().get("agent", {})
+            if isinstance(_persona_section, dict):
+                _persona = _persona_section.get("persona", "")
+                if _persona == "web-browsing-agent" and not enabled_toolsets:
+                    enabled_toolsets = ["web-browsing-agent"]
+                    self.enabled_toolsets = enabled_toolsets
+                    if not self.quiet_mode:
+                        print(f"🌐 Persona: web-browsing-agent (browser-only toolset)")
+        except Exception:
+            pass
+
         # Get available tools with filtering
         self.tools = get_tool_definitions(
             enabled_toolsets=enabled_toolsets,
@@ -1134,6 +1150,7 @@ class AIAgent:
         if not isinstance(_agent_section, dict):
             _agent_section = {}
         self._tool_use_enforcement = _agent_section.get("tool_use_enforcement", "auto")
+        self._persona = _agent_section.get("persona", "default")
 
         # Initialize context compressor for automatic context management
         # Compresses conversation when approaching model's context limit
@@ -2692,30 +2709,36 @@ class AIAgent:
         #   6. Current date & time (frozen at build time)
         #   7. Platform-specific formatting hint
 
-        # Try SOUL.md as primary identity (unless context files are skipped)
-        _soul_loaded = False
-        if not self.skip_context_files:
-            _soul_content = load_soul_md()
-            if _soul_content:
-                prompt_parts = [_soul_content]
-                _soul_loaded = True
+        # Persona-specific identity: web-browsing-agent gets its own identity
+        # and guidance block, bypassing SOUL.md and default identity.
+        if getattr(self, "_persona", "default") == "web-browsing-agent":
+            prompt_parts = [WEB_BROWSING_AGENT_IDENTITY, WEB_BROWSING_GUIDANCE]
+            _soul_loaded = False  # not using SOUL.md
+        else:
+            # Try SOUL.md as primary identity (unless context files are skipped)
+            _soul_loaded = False
+            if not self.skip_context_files:
+                _soul_content = load_soul_md()
+                if _soul_content:
+                    prompt_parts = [_soul_content]
+                    _soul_loaded = True
 
-        if not _soul_loaded:
-            # Fallback to hardcoded identity
-            _ai_peer_name = (
-                None
-                if False
-                else None
-            )
-            if _ai_peer_name:
-                _identity = DEFAULT_AGENT_IDENTITY.replace(
-                    "You are Hermes Agent",
-                    f"You are {_ai_peer_name}",
-                    1,
+            if not _soul_loaded:
+                # Fallback to hardcoded identity
+                _ai_peer_name = (
+                    None
+                    if False
+                    else None
                 )
-            else:
-                _identity = DEFAULT_AGENT_IDENTITY
-            prompt_parts = [_identity]
+                if _ai_peer_name:
+                    _identity = DEFAULT_AGENT_IDENTITY.replace(
+                        "You are Hermes Agent",
+                        f"You are {_ai_peer_name}",
+                        1,
+                    )
+                else:
+                    _identity = DEFAULT_AGENT_IDENTITY
+                prompt_parts = [_identity]
 
         # Tool-aware behavioral guidance: only inject when the tools are loaded
         tool_guidance = []

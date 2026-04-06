@@ -203,6 +203,23 @@ TOOLSETS = {
         "includes": []
     },
 
+    "web-browsing-agent": {
+        "description": "Web browsing agent for account navigation, settings, passwords, passkeys, caching, pop-ups, and fraud/phishing detection",
+        "tools": [
+            # Browser automation (core)
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_close", "browser_get_images",
+            "browser_vision", "browser_console",
+            # Web search (find URLs, help pages, docs)
+            "web_search", "web_extract",
+            # Planning & memory (remember site layouts, user prefs)
+            "todo", "memory",
+            # Session recall
+            "session_search",
+        ],
+        "includes": []
+    },
 
     # Scenario-specific toolsets
     
