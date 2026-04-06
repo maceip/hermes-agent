@@ -213,6 +213,8 @@ TOOLSETS = {
             "browser_vision", "browser_console",
             # Web search (find URLs, help pages, docs)
             "web_search", "web_extract",
+            # Phishing / fraud detection
+            "url_phishing_check",
             # Planning & memory (remember site layouts, user prefs)
             "todo", "memory",
             # Session recall

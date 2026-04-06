@@ -81,6 +81,7 @@ from agent.prompt_builder import (
     DEFAULT_AGENT_IDENTITY, PLATFORM_HINTS,
     MEMORY_GUIDANCE, SESSION_SEARCH_GUIDANCE, SKILLS_GUIDANCE,
     WEB_BROWSING_AGENT_IDENTITY, WEB_BROWSING_GUIDANCE,
+    WEB_BROWSING_MEMORY_GUIDANCE, WEB_BROWSING_SESSION_SEARCH_GUIDANCE,
     build_nous_subscription_prompt,
 )
 from agent.model_metadata import (
@@ -907,20 +908,25 @@ class AIAgent:
                 print(f"🔄 Fallback chain ({len(self._fallback_chain)} providers): " +
                       " → ".join(f"{f['model']} ({f['provider']})" for f in self._fallback_chain))
 
-        # Persona-based toolset override: if agent.persona is set in config,
-        # force the corresponding toolset (e.g. "web-browsing-agent").
+        # Persona-based toolset override: if agent.persona is set in config
+        # or via HERMES_WEB_BROWSING_AGENT env var, force the corresponding
+        # toolset (e.g. "web-browsing-agent").
+        _persona_detected = ""
         try:
             from hermes_cli.config import load_config as _load_persona_cfg
             _persona_section = _load_persona_cfg().get("agent", {})
             if isinstance(_persona_section, dict):
-                _persona = _persona_section.get("persona", "")
-                if _persona == "web-browsing-agent" and not enabled_toolsets:
-                    enabled_toolsets = ["web-browsing-agent"]
-                    self.enabled_toolsets = enabled_toolsets
-                    if not self.quiet_mode:
-                        print(f"🌐 Persona: web-browsing-agent (browser-only toolset)")
+                _persona_detected = _persona_section.get("persona", "")
         except Exception:
             pass
+        # Environment variable override (used by run_web_agent.py entry point)
+        if os.environ.get("HERMES_WEB_BROWSING_AGENT") == "1":
+            _persona_detected = "web-browsing-agent"
+        if _persona_detected == "web-browsing-agent" and not enabled_toolsets:
+            enabled_toolsets = ["web-browsing-agent"]
+            self.enabled_toolsets = enabled_toolsets
+            if not self.quiet_mode:
+                print("🌐 Web Browsing Agent mode (browser-only toolset)")
 
         # Get available tools with filtering
         self.tools = get_tool_definitions(
@@ -1151,6 +1157,9 @@ class AIAgent:
             _agent_section = {}
         self._tool_use_enforcement = _agent_section.get("tool_use_enforcement", "auto")
         self._persona = _agent_section.get("persona", "default")
+        # Environment variable can override persona (used by run_web_agent.py)
+        if os.environ.get("HERMES_WEB_BROWSING_AGENT") == "1":
+            self._persona = "web-browsing-agent"
 
         # Initialize context compressor for automatic context management
         # Compresses conversation when approaching model's context limit
@@ -2740,13 +2749,19 @@ class AIAgent:
                     _identity = DEFAULT_AGENT_IDENTITY
                 prompt_parts = [_identity]
 
-        # Tool-aware behavioral guidance: only inject when the tools are loaded
+        # Tool-aware behavioral guidance: only inject when the tools are loaded.
+        # Web-browsing-agent persona gets browser-specific guidance instead of generic.
+        _is_web_browsing = getattr(self, "_persona", "default") == "web-browsing-agent"
         tool_guidance = []
         if "memory" in self.valid_tool_names:
-            tool_guidance.append(MEMORY_GUIDANCE)
+            tool_guidance.append(
+                WEB_BROWSING_MEMORY_GUIDANCE if _is_web_browsing else MEMORY_GUIDANCE
+            )
         if "session_search" in self.valid_tool_names:
-            tool_guidance.append(SESSION_SEARCH_GUIDANCE)
-        if "skill_manage" in self.valid_tool_names:
+            tool_guidance.append(
+                WEB_BROWSING_SESSION_SEARCH_GUIDANCE if _is_web_browsing else SESSION_SEARCH_GUIDANCE
+            )
+        if not _is_web_browsing and "skill_manage" in self.valid_tool_names:
             tool_guidance.append(SKILLS_GUIDANCE)
         if tool_guidance:
             prompt_parts.append(" ".join(tool_guidance))

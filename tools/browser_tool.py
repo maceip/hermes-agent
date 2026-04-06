@@ -232,9 +232,15 @@ def _get_cdp_override() -> str:
 # Cloud Provider Registry
 # ============================================================================
 
+try:
+    from tools.browser_providers.cef import CefProvider as _CefProvider
+except ImportError:
+    _CefProvider = None
+
 _PROVIDER_REGISTRY: Dict[str, type] = {
     "browserbase": BrowserbaseProvider,
     "browser-use": BrowserUseProvider,
+    **({"cef": _CefProvider} if _CefProvider else {}),
 }
 
 _cached_cloud_provider: Optional[CloudBrowserProvider] = None
@@ -1137,6 +1143,15 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
                      "Secrets must not be sent in URLs.",
         })
 
+    # Phishing pre-flight check — run URL phishing analysis and include
+    # warnings in the navigation result when risk is detected.
+    _phishing_report = None
+    try:
+        from tools.url_phishing import analyze_url as _phishing_analyze
+        _phishing_report = _phishing_analyze(url)
+    except Exception:
+        pass  # phishing module is optional — don't break navigation
+
     # SSRF protection — block private/internal addresses before navigating.
     # Skipped for local backends (Camofox, headless Chromium without a cloud
     # provider) because the agent already has full local network access via
@@ -1227,7 +1242,15 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
                     "Consider upgrading Browserbase plan for proxy support."
                 )
             response["stealth_features"] = active_features
-        
+
+        # Attach phishing analysis when risk is non-trivial
+        if _phishing_report and _phishing_report.get("risk_level") not in (None, "low"):
+            response["phishing_warning"] = {
+                "risk_level": _phishing_report["risk_level"],
+                "findings": _phishing_report["findings"],
+                "recommendation": _phishing_report["recommendation"],
+            }
+
         return json.dumps(response, ensure_ascii=False)
     else:
         return json.dumps({

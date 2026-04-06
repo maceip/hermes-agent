@@ -1,0 +1,106 @@
+# Web Browsing Agent — Configuration Example
+# Copy to ~/.hermes/config.yaml and adjust to your setup.
+#
+# This configures Hermes as a dedicated web browsing agent that only
+# operates within browsers — no terminal, no code, no file system access.
+
+# ─────────────────────────────────────────────────────────────────────
+# Model
+# ─────────────────────────────────────────────────────────────────────
+model:
+  default: "anthropic/claude-sonnet-4"      # Good balance of speed + capability
+  # default: "anthropic/claude-opus-4"      # Maximum capability for complex sites
+  # default: "google/gemini-3-flash-preview"  # Fast + cheap for simple navigation
+
+# ─────────────────────────────────────────────────────────────────────
+# Agent Persona
+# ─────────────────────────────────────────────────────────────────────
+agent:
+  persona: "web-browsing-agent"   # Activates browser-only identity + toolset
+  max_turns: 60                   # Max tool-call iterations per conversation
+  tool_use_enforcement: "auto"    # Ensure model actually calls tools
+
+# ─────────────────────────────────────────────────────────────────────
+# Browser
+# ─────────────────────────────────────────────────────────────────────
+browser:
+  # Backend: "local" (free headless Chromium), "browserbase" (cloud with stealth),
+  #          "cef" (future — maceip/cef integration)
+  cloud_provider: "local"
+
+  # Seconds before idle browser sessions are cleaned up
+  inactivity_timeout: 300
+
+  # Seconds per browser command before timeout
+  command_timeout: 30
+
+  # Allow navigation to private/internal IPs (only for local network testing)
+  allow_private_urls: false
+
+  # Record browser sessions as WebM video (debugging)
+  record_sessions: false
+
+# ─────────────────────────────────────────────────────────────────────
+# Browserbase Cloud (optional — for anti-detection and stealth)
+# Uncomment and set credentials to use cloud browser backend.
+# ─────────────────────────────────────────────────────────────────────
+# browser:
+#   cloud_provider: "browserbase"
+#   inactivity_timeout: 300
+#   command_timeout: 30
+#
+# Environment variables needed:
+#   BROWSERBASE_API_KEY=your_api_key
+#   BROWSERBASE_PROJECT_ID=your_project_id
+#   BROWSERBASE_PROXIES=true        # Residential proxies (paid)
+#   BROWSERBASE_ADVANCED_STEALTH=false  # Advanced stealth (Scale plan)
+
+# ─────────────────────────────────────────────────────────────────────
+# Memory
+# ─────────────────────────────────────────────────────────────────────
+memory:
+  memory_enabled: true             # Remember site layouts, navigation patterns
+  user_profile_enabled: true       # Remember user's sites and preferences
+  memory_char_limit: 2200
+  user_char_limit: 1375
+  nudge_interval: 10               # Prompt to save memory every N turns
+
+# ─────────────────────────────────────────────────────────────────────
+# Context Compression
+# ─────────────────────────────────────────────────────────────────────
+compression:
+  enabled: true
+  threshold: 0.50                  # Compress at 50% of context limit
+  # summary_model: "google/gemini-3-flash-preview"  # Cheap model for compression
+
+# ─────────────────────────────────────────────────────────────────────
+# Web Search (for finding site URLs and help docs)
+# ─────────────────────────────────────────────────────────────────────
+# web:
+#   backend: "auto"   # auto-detects: Firecrawl > Parallel > Tavily > Exa
+#
+# Environment variables (set at least one):
+#   FIRECRAWL_API_KEY=your_key
+#   TAVILY_API_KEY=your_key
+#   EXA_API_KEY=your_key
+
+# ─────────────────────────────────────────────────────────────────────
+# Security
+# ─────────────────────────────────────────────────────────────────────
+security:
+  website_blocklist:
+    enabled: false                 # Set to true and add domains to block
+    domains: []
+    # domains:
+    #   - "malware-site.com"
+    #   - "*.tracking-domain.com"
+    shared_files: []
+    # shared_files:
+    #   - "~/.hermes/blocklist.txt"
+
+# ─────────────────────────────────────────────────────────────────────
+# Auxiliary Models (for vision analysis of screenshots, page extraction)
+# ─────────────────────────────────────────────────────────────────────
+# Set via environment variables:
+#   AUXILIARY_VISION_MODEL=google/gemini-3-flash-preview
+#   AUXILIARY_WEB_EXTRACT_MODEL=google/gemini-3-flash-preview
